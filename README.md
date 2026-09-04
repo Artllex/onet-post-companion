@@ -1,7 +1,5 @@
 # Onet Post Companion
 
-![Onet Post Companion](icons/icon-256.png)
-
 **Onet Post Companion** to rozszerzenie dla Firefoksa, które usprawnia codzienną pracę z **Onet Pocztą**. Projekt powstał jako zestaw praktycznych skrótów i automatyzacji dla osób, które chcą obsługiwać skrzynkę szybciej, przede wszystkim z klawiatury.
 
 > Projekt niezależny. Nie jest oficjalnym produktem ani rozszerzeniem Grupy Onet.
