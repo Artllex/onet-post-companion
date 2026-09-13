@@ -1,18 +1,19 @@
-# Onet Post Companion v0.1.3
+# Onet Post Companion v0.1.4
 
-Pierwsze publiczne wydanie rozszerzenia **Onet Post Companion** dla Firefoksa.
+Wydanie przygotowane do publikacji w **Mozilla Add-ons / Firefox Marketplace**.
 
-Rozszerzenie skupia się na szybszej, bardziej „desktopowej” obsłudze Onet Poczty z klawiatury. Pozwala poruszać się po wiadomościach bez sięgania po mysz, zaznaczać i grupować wiadomości, zarządzać gwiazdkami, szybko usuwać oraz cofać i ponawiać operacje.
+Najważniejsza zmiana względem 0.1.3 to pełne wykorzystanie oficjalnej ikony Onet Post Companion także jako ikony przycisku rozszerzenia na pasku Firefoksa. Funkcjonalnie zachowane zostały wszystkie dotychczasowe skróty, automatyzacje i poprawki.
 
-### Najważniejsze elementy wydania
+### Najważniejsze funkcje
 - nawigacja `↑ / ↓`,
 - zaznaczanie `Spacją`,
 - zakres `Shift + ↑ / ↓`,
-- gwiazdki pod `S`,
+- gwiazdki pod `S` z ujednolicaniem stanu dla wielu wiadomości,
 - grupowe operacje na wielu wiadomościach,
 - `Delete / Backspace`,
 - wielopoziomowe `Ctrl+Z / Ctrl+Y`,
 - automatyczne usuwanie reklamowego nadawcy Onetu,
-- obsługa ukrytych kontrolek pojawiających się po hover.
+- obsługa ukrytych kontrolek pojawiających się po hover,
+- oficjalna ikona projektu na pasku Firefoksa.
 
 Projekt jest niezależny od Grupy Onet i udostępniany na licencji MIT.
