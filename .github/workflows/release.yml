@@ -1,0 +1,83 @@
+name: Build and publish current release
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "manifest.json"
+      - "src/**"
+      - "icons/**"
+      - "RELEASE_NOTES.md"
+      - ".github/workflows/release.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read version
+        id: meta
+        shell: bash
+        run: |
+          VERSION=$(jq -r '.version' manifest.json)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build XPI and source ZIP
+        shell: bash
+        run: |
+          VERSION="${{ steps.meta.outputs.version }}"
+
+          zip -r "Onet_Post_Companion_v${VERSION}_unsigned.xpi" \
+            manifest.json src icons LICENSE README.md CHANGELOG.md RELEASE_NOTES.md
+
+          zip -r "Onet_Post_Companion_v${VERSION}_SOURCE.zip" . \
+            -x '.git/*' \
+            -x 'Onet_Post_Companion_v*_unsigned.xpi' \
+            -x 'Onet_Post_Companion_v*_SOURCE.zip' \
+            -x 'Onet_Post_Companion_v*_SHA256SUMS.txt'
+
+          sha256sum \
+            "Onet_Post_Companion_v${VERSION}_unsigned.xpi" \
+            "Onet_Post_Companion_v${VERSION}_SOURCE.zip" \
+            > "Onet_Post_Companion_v${VERSION}_SHA256SUMS.txt"
+
+      - name: Remove older GitHub releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          CURRENT_TAG="${{ steps.meta.outputs.tag }}"
+
+          gh release list --limit 100 --json tagName --jq '.[].tagName' | while read -r TAG; do
+            [ -z "$TAG" ] && continue
+            gh release delete "$TAG" --cleanup-tag --yes || true
+          done
+
+          # If a release/tag with the current version existed, the loop above removed it too.
+          # We recreate exactly one release from the current main commit below.
+          git fetch --tags --force || true
+
+      - name: Create the only current release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          VERSION="${{ steps.meta.outputs.version }}"
+          TAG="${{ steps.meta.outputs.tag }}"
+
+          gh release create "$TAG" \
+            --target "${GITHUB_SHA}" \
+            --title "Onet Post Companion v${VERSION}" \
+            --notes-file RELEASE_NOTES.md \
+            "Onet_Post_Companion_v${VERSION}_unsigned.xpi" \
+            "Onet_Post_Companion_v${VERSION}_SOURCE.zip" \
+            "Onet_Post_Companion_v${VERSION}_SHA256SUMS.txt"
