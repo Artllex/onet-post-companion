@@ -1,13 +1,31 @@
 {
-  "summary": {
-    "pl": "Szybsza obsługa Onet Poczty: skróty klawiaturowe, zaznaczanie, gwiazdki, usuwanie i cofanie operacji.",
-    "en-US": "Faster Onet Mail handling with keyboard shortcuts, selection, starring, deletion and undo/redo."
+  "default_locale": "pl",
+  "name": {
+    "pl": "Onet Post Companion"
   },
-  "categories": [
-    "other"
-  ],
+  "summary": {
+    "pl": "Szybsza obsługa Onet Poczty: nawigacja klawiaturą, zaznaczanie wielu maili, gwiazdki, Delete/Backspace oraz Ctrl+Z/Ctrl+Y."
+  },
+  "description": {
+    "pl": "Onet Post Companion usprawnia codzienną obsługę Onet Poczty w Firefoxie.\n\nNajważniejsze funkcje:\n- nawigacja po wiadomościach klawiszami ↑ / ↓,\n- zaznaczanie i odznaczanie Spacją,\n- rozszerzanie zakresu przez Shift + ↑ / ↓,\n- obsługa gwiazdek klawiszem S, także dla wielu zaznaczonych wiadomości,\n- szybkie usuwanie przez Delete i Backspace,\n- grupowe operacje na wielu wiadomościach,\n- wielopoziomowe Ctrl+Z / Ctrl+Y dla usuwania i przenoszenia,\n- automatyczne usuwanie wiadomości reklamowych Onetu od mailing_reklamowy@grupaonet.pl,\n- obsługa kontrolek ukrytych do momentu najechania kursorem.\n\nRozszerzenie działa wyłącznie na stronach Onet Poczty i korzysta z bieżącej zalogowanej sesji użytkownika. Nie wysyła treści wiadomości ani danych użytkownika do zewnętrznych usług.\n\nProjekt niezależny od Grupy Onet."
+  },
+  "categories": {
+    "firefox": [
+      "social-communication",
+      "other"
+    ]
+  },
+  "homepage": {
+    "pl": "https://github.com/Artllex/onet-post-companion"
+  },
+  "slug": "onet-post-companion",
+  "is_experimental": false,
+  "requires_payment": false,
   "version": {
     "license": "MIT",
-    "approval_notes": "Onet Post Companion is a Firefox-only extension for poczta.onet.pl. It runs readable, unminified first-party JavaScript only. No third-party libraries or remote code are used. The MAIN execution world is intentional because the extension intercepts the page's own fetch calls to preserve undo/redo for mail move/delete operations. The extension communicates only with poczta.onet.pl and api.poczta.onet.pl within the user's authenticated Onet Mail session. No analytics or developer servers are used."
+    "release_notes": {
+      "pl": "Wersja 0.1.4: oficjalna ikona projektu na pasku Firefoksa oraz komplet dotychczasowych skrótów i automatyzacji Onet Poczty."
+    },
+    "approval_notes": "Kod jest czytelny i nie jest minifikowany ani bundlowany. Rozszerzenie nie używa zewnętrznych bibliotek ani zdalnego kodu. Działa tylko na https://poczta.onet.pl/* oraz komunikuje się z https://api.poczta.onet.pl/* w ramach zalogowanej sesji Onet Poczty. MAIN world jest celowy, ponieważ rozszerzenie przechwytuje wywołania fetch strony w celu zachowania Ctrl+Z/Ctrl+Y dla operacji przenoszenia/usuwania. Nie wysyła danych do serwerów autora i nie używa analityki. Do testów reviewer może użyć własnego konta Onet Poczta. Repozytorium źródłowe: https://github.com/Artllex/onet-post-companion"
   }
 }
