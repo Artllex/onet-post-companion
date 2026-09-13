@@ -43,6 +43,8 @@
 
 Rozszerzenie działa lokalnie w przeglądarce i komunikuje się z interfejsem oraz API Onet Poczty w ramach bieżącej zalogowanej sesji. Nie wysyła treści skrzynki do zewnętrznych usług ani serwerów projektu.
 
+Szczegóły: [PRIVACY.md](PRIVACY.md)
+
 ## Ikona
 
 Oficjalna ikona projektu znajduje się w `icons/icon-original.png`. Jest to **dokładnie obraz wybrany dla projektu**; mniejsze warianty są wyłącznie technicznymi przeskalowaniami dla Firefoksa.
