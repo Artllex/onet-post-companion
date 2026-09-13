@@ -16,4 +16,6 @@ Najważniejsza zmiana względem 0.1.3 to pełne wykorzystanie oficjalnej ikony O
 - obsługa ukrytych kontrolek pojawiających się po hover,
 - oficjalna ikona projektu na pasku Firefoksa.
 
+Do wydania dodano także politykę prywatności oraz metadane ułatwiające zgłoszenie do AMO.
+
 Projekt jest niezależny od Grupy Onet i udostępniany na licencji MIT.
