@@ -1,14 +1,14 @@
 /**
- * Onet Post Companion v0.1.4
+ * Onet Post Companion v0.1.5
  * Firefox extension content script.
  *
- * Based on the stable Onet Poczta userscript branch v4.8.19.
+ * Maintained as the Onet Post Companion Firefox extension.
  * Runs automatically on https://poczta.onet.pl/*
  */
 (function () {
     'use strict';
 
-    console.log('ONET DELETE 4.8.22: skrypt uruchomiony');
+    console.log('ONET POST COMPANION 0.1.5: skrypt uruchomiony');
 
     let cachedYesButton = null;
     let cachedCancelButton = null;
@@ -23,13 +23,13 @@
         'https://api.poczta.onet.pl/webmailapi/mail/?mailsGroup=1';
 
     const API_CAPTURE_EVENT =
-        '__ONET_DELETE_MAIL_PATCH_V4819__';
+        '__ONET_POST_COMPANION_MAIL_PATCH_V1__';
 
     const UNDO_STORAGE_KEY =
-        'onet-delete-api-undo-stack-v4.8.19';
+        'onet-post-companion-api-undo-stack-v1';
 
     const REDO_STORAGE_KEY =
-        'onet-delete-api-redo-stack-v4.8.19';
+        'onet-post-companion-api-redo-stack-v1';
 
     /*
      * Historia jest ograniczona liczbą operacji, a nie czasem.
@@ -86,7 +86,7 @@
         78681;
 
     const AUTO_AD_HANDLED_KEY =
-        'onet-delete-auto-ad-handled-v4.8.19';
+        'onet-post-companion-auto-ad-handled-v1';
 
     let trashFolderId =
         null;
@@ -133,7 +133,7 @@
         'data-onet-keyboard-focus';
 
     const KEYBOARD_FOCUS_STYLE_ID =
-        '__onet_keyboard_focus_style_v485';
+        '__onet_post_companion_keyboard_focus_style_v1';
 
 
     // ============================================================
@@ -286,7 +286,7 @@
             }
 
             console.log(
-                'ONET DELETE 4.8.22: znaleziono modal',
+                'ONET POST COMPANION 0.1.5: znaleziono modal',
                 { yes, cancel }
             );
 
@@ -388,8 +388,8 @@
 
         console.log(
             isEnter
-                ? 'ONET DELETE 4.8.22: Enter -> Tak'
-                : 'ONET DELETE 4.8.22: Esc -> Anuluj'
+                ? 'ONET POST COMPANION 0.1.5: Enter -> Tak'
+                : 'ONET POST COMPANION 0.1.5: Esc -> Anuluj'
         );
 
         button.click();
@@ -714,7 +714,7 @@
             )
         ) {
             console.log(
-                'ONET DELETE 4.8.22: Esc -> wykryto zaznaczone maile, ale nie znaleziono wszystkich checkboxów; nic nie klikam',
+                'ONET POST COMPANION 0.1.5: Esc -> wykryto zaznaczone maile, ale nie znaleziono wszystkich checkboxów; nic nie klikam',
                 rows
             );
 
@@ -723,7 +723,7 @@
 
 
         console.log(
-            `ONET DELETE 4.8.22: Esc -> odznaczam ${buttons.length} wiadomość/wiadomości`
+            `ONET POST COMPANION 0.1.5: Esc -> odznaczam ${buttons.length} wiadomość/wiadomości`
         );
 
 
@@ -997,7 +997,7 @@
             error
         ) {
             console.error(
-                'ONET DELETE 4.8.22: nie udało się przekazać PATCH-a do historii',
+                'ONET POST COMPANION 0.1.5: nie udało się przekazać PATCH-a do historii',
                 error
             );
         }
@@ -1006,7 +1006,7 @@
 
     function installFetchInterceptor() {
         if (
-            window.__ONET_DELETE_FETCH_PATCHED_V4819__
+            window.__ONET_POST_COMPANION_FETCH_PATCHED_V1__
         ) {
             return;
         }
@@ -1020,7 +1020,7 @@
             return;
         }
 
-        window.__ONET_DELETE_FETCH_PATCHED_V4819__ =
+        window.__ONET_POST_COMPANION_FETCH_PATCHED_V1__ =
             true;
 
 
@@ -1123,7 +1123,7 @@
 
 
         console.log(
-            'ONET DELETE 4.8.22: przechwytuję PATCH oraz GET API Onetu'
+            'ONET POST COMPANION 0.1.5: przechwytuję PATCH oraz GET API Onetu'
         );
     }
 
@@ -1220,7 +1220,7 @@
             error
         ) {
             console.error(
-                'ONET DELETE 4.8.22: błąd zapisu historii',
+                'ONET POST COMPANION 0.1.5: błąd zapisu historii',
                 error
             );
         }
@@ -1255,7 +1255,7 @@
             );
 
         console.log(
-            'ONET DELETE 4.8.22: historia załadowana',
+            'ONET POST COMPANION 0.1.5: historia załadowana',
             {
                 undo:
                     undoStack.length,
@@ -1440,7 +1440,7 @@
         externalMovePendingUntil = 0;
 
         console.log(
-            'ONET DELETE 4.8.22: zapisano operację do undo',
+            'ONET POST COMPANION 0.1.5: zapisano operację do undo',
             {
                 undo:
                     undoStack.length,
@@ -1586,13 +1586,13 @@
 
             if (!state) {
                 console.log(
-                    'ONET DELETE 4.8.22: Ctrl+Z -> stos pusty'
+                    'ONET POST COMPANION 0.1.5: Ctrl+Z -> stos pusty'
                 );
                 return;
             }
 
             console.log(
-                'ONET DELETE 4.8.22: Ctrl+Z -> cofam',
+                'ONET POST COMPANION 0.1.5: Ctrl+Z -> cofam',
                 state
             );
 
@@ -1611,7 +1611,7 @@
             error
         ) {
             console.error(
-                'ONET DELETE 4.8.22: Ctrl+Z -> błąd',
+                'ONET POST COMPANION 0.1.5: Ctrl+Z -> błąd',
                 error
             );
 
@@ -1639,13 +1639,13 @@
 
             if (!state) {
                 console.log(
-                    'ONET DELETE 4.8.22: Ctrl+Y -> stos pusty'
+                    'ONET POST COMPANION 0.1.5: Ctrl+Y -> stos pusty'
                 );
                 return;
             }
 
             console.log(
-                'ONET DELETE 4.8.22: Ctrl+Y -> ponawiam',
+                'ONET POST COMPANION 0.1.5: Ctrl+Y -> ponawiam',
                 state
             );
 
@@ -1664,7 +1664,7 @@
             error
         ) {
             console.error(
-                'ONET DELETE 4.8.22: Ctrl+Y -> błąd',
+                'ONET POST COMPANION 0.1.5: Ctrl+Y -> błąd',
                 error
             );
 
@@ -2044,7 +2044,7 @@
 
 
                 console.log(
-                    'ONET DELETE 4.8.22: wykryto ID Kosza',
+                    'ONET POST COMPANION 0.1.5: wykryto ID Kosza',
                     trashFolderId
                 );
             }
@@ -2123,7 +2123,7 @@
 
 
         console.log(
-            'ONET DELETE 4.8.22: używam fallback ID Kosza',
+            'ONET POST COMPANION 0.1.5: używam fallback ID Kosza',
             trashFolderId
         );
 
@@ -2261,7 +2261,7 @@
 
 
             console.log(
-                'ONET DELETE 4.8.22: automatycznie przenoszę reklamy do Kosza przez API',
+                'ONET POST COMPANION 0.1.5: automatycznie przenoszę reklamy do Kosza przez API',
                 payload
             );
 
@@ -2350,7 +2350,7 @@
             error
         ) {
             console.error(
-                'ONET DELETE 4.8.22: auto-delete reklam nie powiódł się',
+                'ONET POST COMPANION 0.1.5: auto-delete reklam nie powiódł się',
                 error
             );
 
@@ -2423,7 +2423,7 @@
 
 
             console.log(
-                `ONET DELETE 4.8.22: API lista -> ${count} reklam od ${AUTO_AD_SENDER}`
+                `ONET POST COMPANION 0.1.5: API lista -> ${count} reklam od ${AUTO_AD_SENDER}`
             );
 
 
@@ -2440,7 +2440,7 @@
             error
         ) {
             console.error(
-                'ONET DELETE 4.8.22: nie udało się przeanalizować listy maili',
+                'ONET POST COMPANION 0.1.5: nie udało się przeanalizować listy maili',
                 error
             );
         }
@@ -2883,7 +2883,7 @@
 
 
         console.log(
-            'ONET DELETE 4.8.22: aktywny mail ->',
+            'ONET POST COMPANION 0.1.5: aktywny mail ->',
             key
         );
 
@@ -3183,7 +3183,7 @@
 
 
                     console.log(
-                        'ONET DELETE 4.8.22: ręcznie zaznaczony mail -> fokus',
+                        'ONET POST COMPANION 0.1.5: ręcznie zaznaczony mail -> fokus',
                         key
                     );
 
@@ -3218,7 +3218,7 @@
 
 
                     console.log(
-                        'ONET DELETE 4.8.22: ręcznie odznaczony mail -> fokus pozostaje',
+                        'ONET POST COMPANION 0.1.5: ręcznie odznaczony mail -> fokus pozostaje',
                         key
                     );
                 }
@@ -3621,7 +3621,7 @@
 
 
                 console.log(
-                    `ONET DELETE 4.8.22: Spacja -> odznaczono wszystkie (${selectedRows.length})`
+                    `ONET POST COMPANION 0.1.5: Spacja -> odznaczono wszystkie (${selectedRows.length})`
                 );
 
 
@@ -3680,7 +3680,7 @@
 
             if (!button) {
                 console.log(
-                    'ONET DELETE 4.8.22: Spacja -> nie znaleziono checkboxa nawet po hover',
+                    'ONET POST COMPANION 0.1.5: Spacja -> nie znaleziono checkboxa nawet po hover',
                     key
                 );
                 return;
@@ -3739,7 +3739,7 @@
             }
 
             console.log(
-                'ONET DELETE 4.8.22: Spacja ->',
+                'ONET POST COMPANION 0.1.5: Spacja ->',
                 changed
                     ? (
                         wasSelected
@@ -3754,7 +3754,7 @@
             error
         ) {
             console.error(
-                'ONET DELETE 4.8.22: błąd Space',
+                'ONET POST COMPANION 0.1.5: błąd Space',
                 error
             );
 
@@ -4351,7 +4351,7 @@
                 0
         ) {
             console.log(
-                'ONET DELETE 4.8.22: brak pełnych danych fid/mid; używam natywnego Usuń'
+                'ONET POST COMPANION 0.1.5: brak pełnych danych fid/mid; używam natywnego Usuń'
             );
 
             return false;
@@ -4396,7 +4396,7 @@
 
         try {
             console.log(
-                `ONET DELETE 4.8.22: usuwam ${rows.length} zaznaczonych maili jednym PATCH-em`,
+                `ONET POST COMPANION 0.1.5: usuwam ${rows.length} zaznaczonych maili jednym PATCH-em`,
                 payload
             );
 
@@ -4440,7 +4440,7 @@
 
 
             /*
-             * v4.8.22:
+             * Ważne:
              * Po zwykłym Delete/Backspace NIE robimy pełnego reloadu.
              * Backend już przyjął PATCH; zostawiamy stronę bez przeładowania.
              *
@@ -4453,7 +4453,7 @@
             error
         ) {
             console.error(
-                'ONET DELETE 4.8.22: wielokrotne usuwanie nie powiodło się',
+                'ONET POST COMPANION 0.1.5: wielokrotne usuwanie nie powiodło się',
                 error
             );
 
@@ -4576,7 +4576,7 @@
 
 
         console.log(
-            'ONET DELETE 4.8.22: usuwam wiadomość przez natywne Usuń',
+            'ONET POST COMPANION 0.1.5: usuwam wiadomość przez natywne Usuń',
             deleteButton
         );
 

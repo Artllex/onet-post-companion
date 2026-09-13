@@ -24,7 +24,7 @@
   "version": {
     "license": "MIT",
     "release_notes": {
-      "pl": "Wersja 0.1.4: oficjalna ikona projektu na pasku Firefoksa oraz komplet dotychczasowych skrótów i automatyzacji Onet Poczty."
+      "pl": "Wersja 0.1.5: spójne identyfikatory Onet Post Companion, oficjalna ikona projektu na pasku Firefoksa oraz komplet dotychczasowych skrótów i automatyzacji Onet Poczty. Po aktualizacji historia Ctrl+Z/Ctrl+Y w bieżącej karcie zaczyna się od nowa."
     },
     "approval_notes": "Kod jest czytelny i nie jest minifikowany ani bundlowany. Rozszerzenie nie używa zewnętrznych bibliotek ani zdalnego kodu. Działa tylko na https://poczta.onet.pl/* oraz komunikuje się z https://api.poczta.onet.pl/* w ramach zalogowanej sesji Onet Poczty. MAIN world jest celowy, ponieważ rozszerzenie przechwytuje wywołania fetch strony w celu zachowania Ctrl+Z/Ctrl+Y dla operacji przenoszenia/usuwania. Nie wysyła danych do serwerów autora i nie używa analityki. Do testów reviewer może użyć własnego konta Onet Poczta. Repozytorium źródłowe: https://github.com/Artllex/onet-post-companion"
   }
