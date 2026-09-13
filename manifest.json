@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Onet Post Companion",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Rozszerzenie usprawniające obsługę Onet Poczty za pomocą klawiatury: nawigacja po wiadomościach, zaznaczanie, gwiazdki, szybkie usuwanie, wielopoziomowe cofanie i ponawianie oraz automatyczne porządkowanie wybranych wiadomości.",
   "author": "Artllex",
   "homepage_url": "https://github.com/Artllex/onet-post-companion",
@@ -12,6 +12,16 @@
     "64": "icons/icon-64.png",
     "96": "icons/icon-96.png",
     "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_title": "Onet Post Companion",
+    "default_area": "navbar",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "64": "icons/icon-64.png"
+    }
   },
   "host_permissions": [
     "https://poczta.onet.pl/*",
