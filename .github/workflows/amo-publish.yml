@@ -1,0 +1,57 @@
+name: Submit to Mozilla Add-ons
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Read version
+        id: meta
+        shell: bash
+        run: |
+          VERSION=$(jq -r '.version' manifest.json)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Lint extension
+        run: npx --yes web-ext@latest lint --source-dir .
+
+      - name: Build reviewer source archive
+        shell: bash
+        run: |
+          VERSION="${{ steps.meta.outputs.version }}"
+          zip -r "Onet_Post_Companion_v${VERSION}_SOURCE.zip" . \
+            -x '.git/*' \
+            -x 'node_modules/*' \
+            -x 'Onet_Post_Companion_v*_SOURCE.zip' \
+            -x 'Onet_Post_Companion_v*_unsigned.xpi' \
+            -x 'Onet_Post_Companion_v*_SHA256SUMS.txt'
+
+      - name: Submit listed add-on to AMO
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.AMO_JWT_ISSUER }}
+          WEB_EXT_API_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+          WEB_EXT_CHANNEL: listed
+        shell: bash
+        run: |
+          VERSION="${{ steps.meta.outputs.version }}"
+          npx --yes web-ext@latest sign \
+            --source-dir . \
+            --channel listed \
+            --amo-metadata amo-metadata.json \
+            --upload-source-code "Onet_Post_Companion_v${VERSION}_SOURCE.zip" \
+            --approval-timeout 0 \
+            --no-input
