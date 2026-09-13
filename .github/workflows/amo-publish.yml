@@ -2,6 +2,11 @@ name: Submit to Mozilla Add-ons
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".amo-publish-trigger"
 
 permissions:
   contents: read
