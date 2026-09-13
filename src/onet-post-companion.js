@@ -1,5 +1,5 @@
 /**
- * Onet Post Companion v0.1.3
+ * Onet Post Companion v0.1.4
  * Firefox extension content script.
  *
  * Based on the stable Onet Poczta userscript branch v4.8.19.
@@ -811,8 +811,7 @@
                 );
 
             return (
-                url.hostname ===
-                    'api.poczta.onet.pl' &&
+                url.hostname === 'api.poczta.onet.pl' &&
                 url.pathname ===
                     '/webmailapi/mail/' &&
                 url.searchParams.get(
@@ -828,8 +827,7 @@
 
     function tryParseJsonBody(body) {
         if (
-            typeof body !==
-            'string'
+            typeof body !== 'string'
         ) {
             return null;
         }
@@ -847,8 +845,7 @@
     function isMovePayload(payload) {
         if (
             !payload ||
-            typeof payload !==
-                'object'
+            typeof payload !== 'object'
         ) {
             return false;
         }
@@ -871,8 +868,7 @@
 
         if (
             !srcMails ||
-            typeof srcMails !==
-                'object' ||
+            typeof srcMails !== 'object' ||
             Array.isArray(
                 srcMails
             )
@@ -905,19 +901,827 @@
                     Array.isArray(
                         mailIds
                     ) &&
-                    mailIds.length >
-                        0 &&
+                    mailIds.length > 0 &&
                     mailIds.every(
                         id =>
                             Number.isSafeInteger(
-                                Number(
-                                    id
-                                )
+                                Number(id)
                             )
                     )
                 );
             }
         );
+    }
+
+
+    function clonePlain(value) {
+        try {
+            return JSON.parse(
+                JSON.stringify(
+                    value
+                )
+            );
+        } catch {
+            return value;
+        }
+    }
+
+
+    function getFetchUrl(input) {
+        if (
+            typeof input === 'string'
+        ) {
+            return input;
+        }
+
+        if (
+            input &&
+            typeof input.url === 'string'
+        ) {
+            return input.url;
+        }
+
+        return '';
+    }
+
+
+    function getFetchMethod(input, init) {
+        const method =
+            init?.method ||
+            input?.method ||
+            'GET';
+
+        return String(method)
+            .toUpperCase();
+    }
+
+
+    async function getFetchBody(input, init) {
+        if (
+            init &&
+            'body' in init
+        ) {
+            return init.body;
+        }
+
+        if (
+            input instanceof Request
+        ) {
+            try {
+                return await input
+                    .clone()
+                    .text();
+            } catch {}
+        }
+
+        return null;
+    }
+
+
+    function dispatchCapturedMove(payload) {
+        try {
+            document.dispatchEvent(
+                new CustomEvent(
+                    API_CAPTURE_EVENT,
+                    {
+                        detail: {
+                            payload:
+                                clonePlain(
+                                    payload
+                                )
+                        }
+                    }
+                )
+            );
+        } catch (
+            error
+        ) {
+            console.error(
+                'ONET DELETE 4.8.22: nie udało się przekazać PATCH-a do historii',
+                error
+            );
+        }
+    }
+
+
+    function installFetchInterceptor() {
+        if (
+            window.__ONET_DELETE_FETCH_PATCHED_V4819__
+        ) {
+            return;
+        }
+
+        const originalFetch =
+            window.fetch;
+
+        if (
+            typeof originalFetch !== 'function'
+        ) {
+            return;
+        }
+
+        window.__ONET_DELETE_FETCH_PATCHED_V4819__ =
+            true;
+
+
+        window.fetch =
+            async function (...args) {
+                const [
+                    input,
+                    init
+                ] = args;
+
+                const url =
+                    getFetchUrl(input);
+
+                const method =
+                    getFetchMethod(
+                        input,
+                        init
+                    );
+
+                const isPatch =
+                    method === 'PATCH' &&
+                    isOnetMailPatchUrl(url);
+
+                let body =
+                    null;
+
+                let payload =
+                    null;
+
+                if (isPatch) {
+                    body =
+                        await getFetchBody(
+                            input,
+                            init
+                        );
+
+                    payload =
+                        tryParseJsonBody(body);
+
+                    if (
+                        isMovePayload(payload) &&
+                        internalMoveRequestDepth === 0
+                    ) {
+                        externalMovePendingUntil =
+                            Date.now() + 3000;
+                    }
+                }
+
+
+                const response =
+                    await originalFetch.apply(
+                        this,
+                        args
+                    );
+
+
+                if (
+                    isPatch &&
+                    isMovePayload(payload) &&
+                    internalMoveRequestDepth === 0 &&
+                    response.ok
+                ) {
+                    dispatchCapturedMove(
+                        payload
+                    );
+                }
+
+
+                /*
+                 * GET /folder -> dynamiczne odkrycie ID Kosza.
+                 */
+                if (
+                    response?.ok &&
+                    method === 'GET' &&
+                    isOnetFolderUrl(url)
+                ) {
+                    inspectFolderResponse(
+                        response.clone()
+                    );
+                }
+
+
+                /*
+                 * GET /mail -> wykrywanie reklam po prawdziwym
+                 * polu `from` w JSON, a nie po DOM.
+                 */
+                if (
+                    response?.ok &&
+                    method === 'GET' &&
+                    isOnetMailListUrl(url)
+                ) {
+                    inspectMailListResponse(
+                        response.clone()
+                    );
+                }
+
+
+                return response;
+            };
+
+
+        console.log(
+            'ONET DELETE 4.8.22: przechwytuję PATCH oraz GET API Onetu'
+        );
+    }
+
+
+
+    // ============================================================
+    // STOSY CTRL+Z / CTRL+Y
+    // ============================================================
+
+    function normalizeState(raw) {
+        if (
+            !raw ||
+            typeof raw !== 'object'
+        ) {
+            return null;
+        }
+
+        if (
+            !isMovePayload(
+                raw.originalPayload
+            ) ||
+            !Array.isArray(
+                raw.inverseRequests
+            ) ||
+            raw.inverseRequests.length === 0 ||
+            !raw.inverseRequests.every(
+                isMovePayload
+            )
+        ) {
+            return null;
+        }
+
+        return {
+            createdAt:
+                Number(
+                    raw.createdAt
+                ) ||
+                Date.now(),
+
+            originalPayload:
+                clonePlain(
+                    raw.originalPayload
+                ),
+
+            inverseRequests:
+                clonePlain(
+                    raw.inverseRequests
+                )
+        };
+    }
+
+
+    function loadStack(key) {
+        try {
+            const parsed =
+                JSON.parse(
+                    sessionStorage
+                        .getItem(key) ||
+                    '[]'
+                );
+
+            if (
+                !Array.isArray(parsed)
+            ) {
+                return [];
+            }
+
+            return parsed
+                .map(normalizeState)
+                .filter(Boolean)
+                .slice(-HISTORY_LIMIT);
+
+        } catch {
+            return [];
+        }
+    }
+
+
+    function saveStack(
+        key,
+        stack
+    ) {
+        try {
+            sessionStorage.setItem(
+                key,
+                JSON.stringify(
+                    stack
+                        .slice(
+                            -HISTORY_LIMIT
+                        )
+                )
+            );
+        } catch (
+            error
+        ) {
+            console.error(
+                'ONET DELETE 4.8.22: błąd zapisu historii',
+                error
+            );
+        }
+    }
+
+
+    function saveUndoStack() {
+        saveStack(
+            UNDO_STORAGE_KEY,
+            undoStack
+        );
+    }
+
+
+    function saveRedoStack() {
+        saveStack(
+            REDO_STORAGE_KEY,
+            redoStack
+        );
+    }
+
+
+    function loadHistoryStacks() {
+        undoStack =
+            loadStack(
+                UNDO_STORAGE_KEY
+            );
+
+        redoStack =
+            loadStack(
+                REDO_STORAGE_KEY
+            );
+
+        console.log(
+            'ONET DELETE 4.8.22: historia załadowana',
+            {
+                undo:
+                    undoStack.length,
+
+                redo:
+                    redoStack.length
+            }
+        );
+    }
+
+
+    function pushUndoState(state) {
+        const normalized =
+            normalizeState(state);
+
+        if (!normalized) {
+            return;
+        }
+
+        undoStack.push(
+            normalized
+        );
+
+        if (
+            undoStack.length >
+            HISTORY_LIMIT
+        ) {
+            undoStack.splice(
+                0,
+                undoStack.length -
+                    HISTORY_LIMIT
+            );
+        }
+
+        saveUndoStack();
+    }
+
+
+    function pushRedoState(state) {
+        const normalized =
+            normalizeState(state);
+
+        if (!normalized) {
+            return;
+        }
+
+        redoStack.push(
+            normalized
+        );
+
+        if (
+            redoStack.length >
+            HISTORY_LIMIT
+        ) {
+            redoStack.splice(
+                0,
+                redoStack.length -
+                    HISTORY_LIMIT
+            );
+        }
+
+        saveRedoStack();
+    }
+
+
+    function clearRedoStack() {
+        if (
+            redoStack.length === 0
+        ) {
+            return;
+        }
+
+        redoStack = [];
+        saveRedoStack();
+    }
+
+
+    function buildInverseRequests(payload) {
+        const destination =
+            Number(
+                payload.dstFolder
+            );
+
+        const requests = [];
+
+        for (
+            const [
+                sourceFolderRaw,
+                mailIdsRaw
+            ]
+            of Object.entries(
+                payload.srcMails
+            )
+        ) {
+            const sourceFolder =
+                Number(
+                    sourceFolderRaw
+                );
+
+            const mailIds =
+                mailIdsRaw
+                    .map(
+                        Number
+                    )
+                    .filter(
+                        Number.isSafeInteger
+                    );
+
+            if (
+                !Number.isSafeInteger(
+                    sourceFolder
+                ) ||
+                mailIds.length === 0
+            ) {
+                continue;
+            }
+
+            requests.push({
+                dstFolder:
+                    sourceFolder,
+
+                srcMails: {
+                    [destination]:
+                        mailIds
+                }
+            });
+        }
+
+        return requests;
+    }
+
+
+    function buildStateFromPayload(payload) {
+        if (
+            !isMovePayload(payload)
+        ) {
+            return null;
+        }
+
+        const inverseRequests =
+            buildInverseRequests(
+                payload
+            );
+
+        if (
+            inverseRequests.length === 0
+        ) {
+            return null;
+        }
+
+        return {
+            createdAt:
+                Date.now(),
+
+            originalPayload:
+                clonePlain(payload),
+
+            inverseRequests:
+                clonePlain(
+                    inverseRequests
+                )
+        };
+    }
+
+
+    function onCapturedMove(event) {
+        const payload =
+            event?.detail?.payload;
+
+        const state =
+            buildStateFromPayload(
+                payload
+            );
+
+        if (!state) {
+            return;
+        }
+
+        pushUndoState(state);
+        clearRedoStack();
+
+        externalMovePendingUntil = 0;
+
+        console.log(
+            'ONET DELETE 4.8.22: zapisano operację do undo',
+            {
+                undo:
+                    undoStack.length,
+
+                redo:
+                    redoStack.length,
+
+                payload:
+                    state.originalPayload
+            }
+        );
+    }
+
+
+    async function waitForPendingCapture() {
+        while (
+            Date.now() <
+            externalMovePendingUntil
+        ) {
+            await new Promise(
+                resolve =>
+                    setTimeout(
+                        resolve,
+                        40
+                    )
+            );
+
+            if (
+                externalMovePendingUntil === 0
+            ) {
+                break;
+            }
+        }
+    }
+
+
+    // ============================================================
+    // PATCH API
+    // ============================================================
+
+    async function sendMovePatch(payload) {
+        internalMoveRequestDepth++;
+
+        try {
+            const response =
+                await fetch(
+                    ONET_MAIL_API,
+                    {
+                        method:
+                            'PATCH',
+
+                        mode:
+                            'cors',
+
+                        credentials:
+                            'include',
+
+                        headers: {
+                            'Accept':
+                                'application/json',
+
+                            'Content-Type':
+                                'application/json'
+                        },
+
+                        body:
+                            JSON.stringify(
+                                payload
+                            )
+                    }
+                );
+
+            if (!response.ok) {
+                const body =
+                    await response
+                        .text()
+                        .catch(
+                            () => ''
+                        );
+
+                throw new Error(
+                    `HTTP ${response.status} ${body}`
+                );
+            }
+
+            return true;
+
+        } finally {
+            internalMoveRequestDepth =
+                Math.max(
+                    0,
+                    internalMoveRequestDepth - 1
+                );
+        }
+    }
+
+
+    async function executeRequests(
+        requests
+    ) {
+        for (
+            const payload
+            of requests
+        ) {
+            await sendMovePatch(
+                payload
+            );
+        }
+    }
+
+
+    function reloadAfterApiAction() {
+        setTimeout(
+            () => {
+                location.reload();
+            },
+            180
+        );
+    }
+
+
+    // ============================================================
+    // CTRL+Z / CTRL+Y — WIELOPOZIOMOWE
+    // ============================================================
+
+    async function performUndo() {
+        if (
+            undoInProgress ||
+            redoInProgress
+        ) {
+            return;
+        }
+
+        undoInProgress = true;
+
+        try {
+            await waitForPendingCapture();
+
+            const state =
+                undoStack[
+                    undoStack.length - 1
+                ];
+
+            if (!state) {
+                console.log(
+                    'ONET DELETE 4.8.22: Ctrl+Z -> stos pusty'
+                );
+                return;
+            }
+
+            console.log(
+                'ONET DELETE 4.8.22: Ctrl+Z -> cofam',
+                state
+            );
+
+            await executeRequests(
+                state.inverseRequests
+            );
+
+            undoStack.pop();
+            saveUndoStack();
+
+            pushRedoState(state);
+
+            reloadAfterApiAction();
+
+        } catch (
+            error
+        ) {
+            console.error(
+                'ONET DELETE 4.8.22: Ctrl+Z -> błąd',
+                error
+            );
+
+        } finally {
+            undoInProgress = false;
+        }
+    }
+
+
+    async function performRedo() {
+        if (
+            undoInProgress ||
+            redoInProgress
+        ) {
+            return;
+        }
+
+        redoInProgress = true;
+
+        try {
+            const state =
+                redoStack[
+                    redoStack.length - 1
+                ];
+
+            if (!state) {
+                console.log(
+                    'ONET DELETE 4.8.22: Ctrl+Y -> stos pusty'
+                );
+                return;
+            }
+
+            console.log(
+                'ONET DELETE 4.8.22: Ctrl+Y -> ponawiam',
+                state
+            );
+
+            await sendMovePatch(
+                state.originalPayload
+            );
+
+            redoStack.pop();
+            saveRedoStack();
+
+            pushUndoState(state);
+
+            reloadAfterApiAction();
+
+        } catch (
+            error
+        ) {
+            console.error(
+                'ONET DELETE 4.8.22: Ctrl+Y -> błąd',
+                error
+            );
+
+        } finally {
+            redoInProgress = false;
+        }
+    }
+
+
+    function handleUndoRedoShortcut(event) {
+        if (
+            isTyping(event)
+        ) {
+            return;
+        }
+
+        if (
+            event.altKey ||
+            event.metaKey ||
+            !event.ctrlKey
+        ) {
+            return;
+        }
+
+        const key =
+            String(
+                event.key || ''
+            )
+                .toLowerCase();
+
+        const isUndo =
+            key === 'z' &&
+            !event.shiftKey;
+
+        const isRedo =
+            key === 'y' ||
+            (
+                key === 'z' &&
+                event.shiftKey
+            );
+
+        if (
+            !isUndo &&
+            !isRedo
+        ) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+
+        if (isUndo) {
+            performUndo();
+        } else {
+            performRedo();
+        }
     }
 
 
@@ -1643,1297 +2447,157 @@
     }
 
 
-    function installFetchInterceptor() {
-        if (
-            window
-                .__ONET_DELETE_FETCH_PATCHED_V4819__
-        ) {
-            return;
-        }
-
-        const originalFetch =
-            window.fetch;
-
-        if (
-            typeof originalFetch !==
-            'function'
-        ) {
-            return;
-        }
-
-        window
-            .__ONET_DELETE_FETCH_PATCHED_V4819__ =
-            true;
-
-
-        window.fetch =
-            async function (
-                input,
-                init
-            ) {
-                let url =
-                    '';
-
-                let method =
-                    'GET';
-
-                let body =
-                    null;
-
-
-                try {
-                    if (
-                        typeof input ===
-                            'string'
-                    ) {
-                        url =
-                            input;
-
-                    } else if (
-                        input?.url
-                    ) {
-                        url =
-                            input.url;
-                    }
-
-
-                    method =
-                        String(
-                            init?.method ||
-                            input?.method ||
-                            'GET'
-                        )
-                            .toUpperCase();
-
-
-                    body =
-                        init?.body ??
-                        null;
-
-
-                    if (
-                        body == null &&
-                        typeof Request !==
-                            'undefined' &&
-                        input instanceof
-                            Request
-                    ) {
-                        try {
-                            body =
-                                await input
-                                    .clone()
-                                    .text();
-                        } catch {}
-                    }
-
-                } catch {}
-
-
-                const payload =
-                    (
-                        method ===
-                            'PATCH' &&
-                        isOnetMailPatchUrl(
-                            url
-                        )
-                    )
-                        ? tryParseJsonBody(
-                            body
-                        )
-                        : null;
-
-
-                const isExternalMove =
-                    (
-                        method ===
-                            'PATCH' &&
-                        isOnetMailPatchUrl(
-                            url
-                        ) &&
-                        isMovePayload(
-                            payload
-                        ) &&
-                        internalMoveRequestDepth ===
-                            0
-                    );
-
-
-                if (
-                    isExternalMove
-                ) {
-                    externalMovePendingUntil =
-                        Date.now() +
-                        4000;
-                }
-
-
-                let response;
-
-                try {
-                    response =
-                        await originalFetch
-                            .apply(
-                                this,
-                                arguments
-                            );
-
-                } finally {
-                    if (
-                        isExternalMove &&
-                        !response?.ok
-                    ) {
-                        externalMovePendingUntil =
-                            0;
-                    }
-                }
-
-
-                /*
-                 * Ręczne Delete / Przenieś -> historia Ctrl+Z/Ctrl+Y.
-                 */
-                if (
-                    response?.ok &&
-                    isExternalMove
-                ) {
-                    try {
-                        document
-                            .dispatchEvent(
-                                new CustomEvent(
-                                    API_CAPTURE_EVENT,
-                                    {
-                                        detail: {
-                                            at:
-                                                Date.now(),
-
-                                            payload
-                                        }
-                                    }
-                                )
-                            );
-                    } catch {}
-
-                    externalMovePendingUntil =
-                        0;
-                }
-
-
-                /*
-                 * GET /folder -> dynamiczne odkrycie ID Kosza.
-                 */
-                if (
-                    response?.ok &&
-                    method ===
-                        'GET' &&
-                    isOnetFolderUrl(
-                        url
-                    )
-                ) {
-                    inspectFolderResponse(
-                        response.clone()
-                    );
-                }
-
-
-                /*
-                 * GET /mail -> wykrywanie reklam po prawdziwym
-                 * polu `from` w JSON, a nie po DOM.
-                 */
-                if (
-                    response?.ok &&
-                    method ===
-                        'GET' &&
-                    isOnetMailListUrl(
-                        url
-                    )
-                ) {
-                    inspectMailListResponse(
-                        response.clone()
-                    );
-                }
-
-
-                return response;
-            };
-
-
-        console.log(
-            'ONET DELETE 4.8.22: przechwytuję PATCH oraz GET API Onetu'
-        );
-    }
-
-
     // ============================================================
-    // BUDOWANIE OPERACJI ODWROTNEJ
+    // NIEWIELKIE POWIADOMIENIE CTRL+Z / CTRL+Y
     // ============================================================
 
-    function flattenMailIdsFromPayload(
-        payload
-    ) {
-        const result =
-            [];
+    let noticeTimer = null;
 
-        for (
-            const ids
-            of Object.values(
-                payload?.srcMails ||
-                {}
-            )
-        ) {
-            if (
-                !Array.isArray(
-                    ids
-                )
-            ) {
-                continue;
-            }
 
-            for (
-                const id
-                of ids
-            ) {
-                const numeric =
-                    Number(
-                        id
-                    );
-
-                if (
-                    Number.isSafeInteger(
-                        numeric
-                    )
-                ) {
-                    result.push(
-                        numeric
-                    );
-                }
-            }
-        }
-
-        return result;
-    }
-
-
-    function buildInverseRequests(
-        payload
-    ) {
-        if (
-            !isMovePayload(
-                payload
-            )
-        ) {
-            return [];
-        }
-
-        const originalDestination =
-            Number(
-                payload.dstFolder
-            );
-
-        const requests =
-            [];
-
-
-        /*
-         * Ogólna inwersja:
-         *
-         * ORYGINAŁ:
-         * dstFolder = D
-         * srcMails = {
-         *   S1: [A, B],
-         *   S2: [C]
-         * }
-         *
-         * CTRL+Z:
-         * 1) dstFolder = S1, srcMails = { D: [A, B] }
-         * 2) dstFolder = S2, srcMails = { D: [C] }
-         *
-         * Dzięki temu nie musimy znać ŻADNYCH ID folderów
-         * z góry.
-         */
-        for (
-            const [
-                sourceFolderRaw,
-                idsRaw
-            ]
-            of Object.entries(
-                payload.srcMails
-            )
-        ) {
-            const sourceFolder =
-                Number(
-                    sourceFolderRaw
-                );
-
-            const mailIds =
-                idsRaw
-                    .map(
-                        id =>
-                            Number(
-                                id
-                            )
-                    )
-                    .filter(
-                        Number.isSafeInteger
-                    );
-
-
-            if (
-                !Number.isSafeInteger(
-                    sourceFolder
-                ) ||
-                mailIds.length ===
-                    0
-            ) {
-                continue;
-            }
-
-
-            requests.push({
-                dstFolder:
-                    sourceFolder,
-
-                srcMails: {
-                    [originalDestination]:
-                        mailIds
-                }
-            });
-        }
-
-
-        return requests;
-    }
-
-
-    // ============================================================
-    // WIELOPOZIOMOWA PAMIĘĆ CTRL+Z / CTRL+Y
-    // ============================================================
-
-    function getSessionStorageSafe() {
-        try {
-            return window
-                .sessionStorage;
-        } catch {
-            return null;
-        }
-    }
-
-
-    function sanitizeHistoryEntry(
-        state
-    ) {
-        if (
-            !state ||
-            !isMovePayload(
-                state.originalPayload
-            ) ||
-            !Array.isArray(
-                state.inverseRequests
-            ) ||
-            state.inverseRequests.length ===
-                0 ||
-            !state.inverseRequests
-                .every(
-                    isMovePayload
-                )
-        ) {
-            return null;
-        }
-
-        return {
-            createdAt:
-                Number(
-                    state.createdAt
-                ) ||
-                Date.now(),
-
-            originalPayload:
-                state.originalPayload,
-
-            inverseRequests:
-                state.inverseRequests
-        };
-    }
-
-
-    function sanitizeHistoryStack(
-        value
-    ) {
-        if (
-            !Array.isArray(
-                value
-            )
-        ) {
-            return [];
-        }
-
-        return value
-            .map(
-                sanitizeHistoryEntry
-            )
-            .filter(
-                Boolean
-            )
-            .slice(
-                -HISTORY_LIMIT
-            );
-    }
-
-
-    function saveUndoStack() {
-        undoStack =
-            sanitizeHistoryStack(
-                undoStack
-            );
-
-        try {
-            getSessionStorageSafe()
-                ?.setItem(
-                    UNDO_STORAGE_KEY,
-                    JSON.stringify(
-                        undoStack
-                    )
-                );
-        } catch {}
-    }
-
-
-    function saveRedoStack() {
-        redoStack =
-            sanitizeHistoryStack(
-                redoStack
-            );
-
-        try {
-            getSessionStorageSafe()
-                ?.setItem(
-                    REDO_STORAGE_KEY,
-                    JSON.stringify(
-                        redoStack
-                    )
-                );
-        } catch {}
-    }
-
-
-    function loadHistoryStacks() {
-        let storedUndo =
-            [];
-
-        let storedRedo =
-            [];
-
-
-        try {
-            const raw =
-                getSessionStorageSafe()
-                    ?.getItem(
-                        UNDO_STORAGE_KEY
-                    );
-
-            if (raw) {
-                storedUndo =
-                    JSON.parse(
-                        raw
-                    );
-            }
-        } catch {}
-
-
-        try {
-            const raw =
-                getSessionStorageSafe()
-                    ?.getItem(
-                        REDO_STORAGE_KEY
-                    );
-
-            if (raw) {
-                storedRedo =
-                    JSON.parse(
-                        raw
-                    );
-            }
-        } catch {}
-
-
-        undoStack =
-            sanitizeHistoryStack(
-                storedUndo
-            );
-
-        redoStack =
-            sanitizeHistoryStack(
-                storedRedo
-            );
-
-
-        saveUndoStack();
-        saveRedoStack();
-
-
-        console.log(
-            'ONET DELETE 4.8.22: historia wczytana',
-            {
-                undo:
-                    undoStack.length,
-
-                redo:
-                    redoStack.length
-            }
-        );
-    }
-
-
-    function clearUndoStack() {
-        undoStack =
-            [];
-
-        saveUndoStack();
-    }
-
-
-    function clearRedoStack() {
-        redoStack =
-            [];
-
-        saveRedoStack();
-    }
-
-
-    function pushUndoState(
-        state
-    ) {
-        const safe =
-            sanitizeHistoryEntry(
-                state
-            );
-
-        if (!safe) {
-            return false;
-        }
-
-        undoStack.push(
-            safe
-        );
-
-        if (
-            undoStack.length >
-            HISTORY_LIMIT
-        ) {
-            undoStack =
-                undoStack.slice(
-                    -HISTORY_LIMIT
-                );
-        }
-
-        saveUndoStack();
-
-        return true;
-    }
-
-
-    function pushRedoState(
-        state
-    ) {
-        const safe =
-            sanitizeHistoryEntry(
-                state
-            );
-
-        if (!safe) {
-            return false;
-        }
-
-        redoStack.push(
-            safe
-        );
-
-        if (
-            redoStack.length >
-            HISTORY_LIMIT
-        ) {
-            redoStack =
-                redoStack.slice(
-                    -HISTORY_LIMIT
-                );
-        }
-
-        saveRedoStack();
-
-        return true;
-    }
-
-
-    function peekUndoState() {
-        return (
-            undoStack[
-                undoStack.length - 1
-            ] ||
-            null
-        );
-    }
-
-
-    function peekRedoState() {
-        return (
-            redoStack[
-                redoStack.length - 1
-            ] ||
-            null
-        );
-    }
-
-
-    function popUndoState() {
-        const state =
-            undoStack.pop() ||
-            null;
-
-        saveUndoStack();
-
-        return state;
-    }
-
-
-    function popRedoState() {
-        const state =
-            redoStack.pop() ||
-            null;
-
-        saveRedoStack();
-
-        return state;
-    }
-
-
-    // ============================================================
-    // HISTORIA KAŻDEGO PRZENIESIENIA MIĘDZY FOLDERAMI
-    // ============================================================
-
-    document.addEventListener(
-        API_CAPTURE_EVENT,
-        event => {
-            const payload =
-                event.detail
-                    ?.payload;
-
-            if (
-                !isMovePayload(
-                    payload
-                )
-            ) {
-                return;
-            }
-
-            const inverseRequests =
-                buildInverseRequests(
-                    payload
-                );
-
-            if (
-                inverseRequests.length ===
-                0
-            ) {
-                return;
-            }
-
-
-            /*
-             * Każdy ręczny PATCH "Przenieś" staje się nowym punktem historii.
-             *
-             * Przykład:
-             *
-             *     folder A -> folder B
-             *
-             * Onet wysyła:
-             *
-             *     dstFolder = B
-             *     srcMails = { A: [mail1, mail2] }
-             *
-             * Ctrl+Z dostaje automatycznie:
-             *
-             *     dstFolder = A
-             *     srcMails = { B: [mail1, mail2] }
-             *
-             * Nie znamy ani nie zgadujemy żadnego ID folderu.
-             */
-            const state = {
-                createdAt:
-                    Date.now(),
-
-                originalPayload:
-                    payload,
-
-                inverseRequests
-            };
-
-
-            pushUndoState(
-                state
-            );
-
-
-            /*
-             * Tak jak w klasycznym Undo/Redo:
-             * nowa ręczna operacja kasuje gałąź Redo.
-             */
-            clearRedoStack();
-
-
-            console.log(
-                'ONET DELETE 4.8.22: przechwycono przeniesienie wiadomości',
-                {
-                    original:
-                        payload,
-
-                    undo:
-                        inverseRequests
-                }
-            );
-        },
-        true
-    );
-
-
-    // ============================================================
-    // CTRL+Z — BEZPOŚREDNI PATCH ODWROTNY
-    // ============================================================
-
-    function sleep(
-        ms
-    ) {
-        return new Promise(
-            resolve =>
-                setTimeout(
-                    resolve,
-                    ms
-                )
-        );
-    }
-
-
-    function showUndoNotice(
-        message
-    ) {
+    function showUndoNotice(text) {
         const doc =
             getMainDocument();
 
-        if (
-            !doc?.documentElement
-        ) {
-            return;
-        }
-
-        doc
-            .getElementById(
+        let box =
+            doc.getElementById(
                 '__onet_delete_undo_notice'
-            )
-            ?.remove();
-
-        const box =
-            doc.createElement(
-                'div'
             );
 
-        box.id =
-            '__onet_delete_undo_notice';
+        if (!box) {
+            box =
+                doc.createElement(
+                    'div'
+                );
 
-        box.textContent =
-            message;
+            box.id =
+                '__onet_delete_undo_notice';
 
-        box.style.cssText = [
-            'position:fixed',
-            'right:20px',
-            'bottom:20px',
-            'z-index:2147483647',
-            'background:rgba(30,30,30,.94)',
-            'color:#fff',
-            'padding:10px 14px',
-            'border-radius:6px',
-            'font:14px/1.35 Arial,sans-serif',
-            'box-shadow:0 4px 18px rgba(0,0,0,.35)',
-            'pointer-events:none'
-        ].join(';');
+            Object.assign(
+                box.style,
+                {
+                    position:
+                        'fixed',
 
-        (
-            doc.body ||
-            doc.documentElement
-        )
-            .appendChild(
+                    left:
+                        '50%',
+
+                    bottom:
+                        '24px',
+
+                    transform:
+                        'translateX(-50%)',
+
+                    zIndex:
+                        '2147483647',
+
+                    padding:
+                        '10px 16px',
+
+                    borderRadius:
+                        '8px',
+
+                    background:
+                        'rgba(20, 20, 20, 0.94)',
+
+                    color:
+                        '#fff',
+
+                    font:
+                        '14px/1.4 sans-serif',
+
+                    boxShadow:
+                        '0 4px 18px rgba(0,0,0,.35)',
+
+                    pointerEvents:
+                        'none'
+                }
+            );
+
+            doc.body.appendChild(
                 box
             );
+        }
 
-        setTimeout(
-            () =>
-                box.remove(),
-            2200
+        box.textContent =
+            text;
+
+        box.style.display =
+            'block';
+
+        clearTimeout(
+            noticeTimer
         );
-    }
 
-
-    async function sendMovePatch(
-        payload
-    ) {
-        internalMoveRequestDepth++;
-
-        try {
-            const response =
-                await fetch(
-                    ONET_MAIL_API,
-                    {
-                        method:
-                            'PATCH',
-
-                        mode:
-                            'cors',
-
-                        credentials:
-                            'include',
-
-                        headers: {
-                            'Accept':
-                                'application/json',
-
-                            'Content-Type':
-                                'application/json'
-                        },
-
-                        body:
-                            JSON.stringify(
-                                payload
-                            )
-                    }
-                );
-
-            if (
-                !response.ok
-            ) {
-                throw new Error(
-                    `HTTP ${response.status}`
-                );
-            }
-
-            return response;
-
-        } finally {
-            internalMoveRequestDepth =
-                Math.max(
-                    0,
-                    internalMoveRequestDepth -
-                        1
-                );
-        }
-    }
-
-
-    async function waitForUndoState(
-        timeout =
-            1800
-    ) {
-        const started =
-            Date.now();
-
-        while (
-            Date.now() -
-                started <
-                timeout
-        ) {
-            const state =
-                peekUndoState();
-
-            if (state) {
-                return state;
-            }
-
-            await sleep(
-                50
-            );
-        }
-
-        return null;
-    }
-
-
-    async function undoLastMove() {
-        if (
-            undoInProgress
-        ) {
-            return false;
-        }
-
-        let state =
-            peekUndoState();
-
-
-        /*
-         * Użytkownik może nacisnąć Ctrl+Z natychmiast po Delete
-         * ALBO po ręcznym "Przenieś", zanim odpowiedź PATCH-a wróci.
-         */
-        if (
-            !state &&
-            Date.now() <=
-                externalMovePendingUntil
-        ) {
-            state =
-                await waitForUndoState();
-        }
-
-
-        if (!state) {
-            return false;
-        }
-
-
-        undoInProgress =
-            true;
-
-
-        try {
-            for (
-                const payload
-                of state
-                    .inverseRequests
-            ) {
-                console.log(
-                    'ONET DELETE 4.8.22: Ctrl+Z -> PATCH odwrotny',
-                    payload
-                );
-
-                await sendMovePatch(
-                    payload
-                );
-            }
-
-
-            const count =
-                state.inverseRequests
-                    .reduce(
-                        (
-                            total,
-                            request
-                        ) =>
-                            total +
-                            flattenMailIdsFromPayload(
-                                request
-                            ).length,
-                        0
-                    );
-
-
-            /*
-             * Usuwamy dokładnie tę operację, którą właśnie cofnęliśmy,
-             * z wierzchołka UNDO i przenosimy ją na stos REDO.
-             */
-            const removed =
-                popUndoState();
-
-            pushRedoState(
-                removed ||
-                state
-            );
-
-
-            showUndoNotice(
-                count === 1
-                    ? (
-                        undoStack.length > 0
-                            ? `Cofnięto przeniesienie wiadomości. Pozostało ${undoStack.length} operacji Ctrl+Z.`
-                            : 'Cofnięto przeniesienie wiadomości.'
-                    )
-                    : (
-                        undoStack.length > 0
-                            ? `Cofnięto przeniesienie ${count} wiadomości. Pozostało ${undoStack.length} operacji Ctrl+Z.`
-                            : `Cofnięto przeniesienie ${count} wiadomości.`
-                    )
-            );
-
-
-            /*
-             * Nie przechodzimy do żadnego folderu.
-             * Tylko odświeżamy BIEŻĄCY widok, aby UI pobrał
-             * aktualny stan z backendu.
-             */
+        noticeTimer =
             setTimeout(
                 () => {
-                    try {
-                        window.top
-                            .location
-                            .reload();
-                    } catch {
-                        location.reload();
-                    }
+                    box.style.display =
+                        'none';
                 },
-                350
+                1800
             );
-
-
-            return true;
-
-        } catch (
-            error
-        ) {
-            console.error(
-                'ONET DELETE 4.8.22: Ctrl+Z nie powiodło się',
-                error
-            );
-
-            showUndoNotice(
-                'Nie udało się cofnąć przeniesienia wiadomości.'
-            );
-
-            return false;
-
-        } finally {
-            undoInProgress =
-                false;
-        }
     }
-
-
-    async function handleUndoShortcut(
-        event
-    ) {
-        const isUndo =
-            event.ctrlKey &&
-            !event.altKey &&
-            !event.shiftKey &&
-            (
-                event.key ===
-                    'z' ||
-                event.key ===
-                    'Z' ||
-                event.code ===
-                    'KeyZ'
-            );
-
-        if (!isUndo) {
-            return;
-        }
-
-
-        /*
-         * Ctrl+Z w polu edycji nadal oznacza cofanie tekstu.
-         */
-        if (
-            isTyping(event)
-        ) {
-            return;
-        }
-
-
-        /*
-         * Jeżeli otwarty jest modal trwałego usuwania,
-         * nie przechwytujemy Ctrl+Z.
-         */
-        if (
-            getConfirmationButton(
-                'cancel'
-            )
-        ) {
-            return;
-        }
-
-
-        const hasUndo =
-            Boolean(
-                peekUndoState()
-            ) ||
-            Boolean(
-                Date.now() <=
-                    externalMovePendingUntil
-            );
-
-
-        if (!hasUndo) {
-            return;
-        }
-
-
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-
-
-        await undoLastMove();
-    }
-
 
 
     // ============================================================
-    // CTRL+Y — PONOWIENIE USUNIĘCIA
+    // STABILNY SELECTOR CHECKBOXA WIADOMOŚCI
     // ============================================================
 
-    async function redoLastMove() {
-        if (
-            redoInProgress
-        ) {
-            return false;
-        }
-
-        const state =
-            peekRedoState();
-
-        if (!state) {
-            return false;
+    function findRowCheckboxButton(row) {
+        if (!row) {
+            return null;
         }
 
 
-        redoInProgress =
-            true;
-
-
-        try {
-            console.log(
-                'ONET DELETE 4.8.22: Ctrl+Y -> ponawiam oryginalny PATCH',
-                state.originalPayload
+        const main =
+            row.querySelector(
+                ':scope > div[role="button"]'
             );
 
 
-            /*
-             * Ctrl+Y nie rekonstruuje żadnych folderów ani ID.
-             * Wysyła dokładnie oryginalny PATCH przechwycony przy
-             * Delete/Backspace.
-             */
-            await sendMovePatch(
-                state.originalPayload
-            );
-
-
-            const count =
-                flattenMailIdsFromPayload(
-                    state.originalPayload
-                ).length;
-
-
-            /*
-             * Operacja została ponowiona: zdejmujemy ją z REDO
-             * i odkładamy z powrotem na wierzchołek UNDO.
-             */
-            const removed =
-                popRedoState();
-
-            pushUndoState(
-                removed ||
-                state
-            );
-
-
-            showUndoNotice(
-                count === 1
-                    ? (
-                        redoStack.length > 0
-                            ? `Ponowiono przeniesienie wiadomości. Pozostało ${redoStack.length} operacji Ctrl+Y.`
-                            : 'Ponowiono przeniesienie wiadomości.'
-                    )
-                    : (
-                        redoStack.length > 0
-                            ? `Ponowiono przeniesienie ${count} wiadomości. Pozostało ${redoStack.length} operacji Ctrl+Y.`
-                            : `Ponowiono przeniesienie ${count} wiadomości.`
-                    )
-            );
-
-
-            /*
-             * Tak jak przy Ctrl+Z nie zmieniamy folderu.
-             * Odświeżamy tylko bieżący widok, żeby UI zsynchronizował
-             * się z backendem.
-             */
-            setTimeout(
-                () => {
-                    try {
-                        window.top
-                            .location
-                            .reload();
-                    } catch {
-                        location.reload();
-                    }
-                },
-                350
-            );
-
-
-            return true;
-
-        } catch (
-            error
-        ) {
-            console.error(
-                'ONET DELETE 4.8.22: Ctrl+Y nie powiodło się',
-                error
-            );
-
-            showUndoNotice(
-                'Nie udało się ponowić przeniesienia wiadomości.'
-            );
-
-            return false;
-
-        } finally {
-            redoInProgress =
-                false;
+        if (!main) {
+            return null;
         }
-    }
 
 
-    async function handleRedoShortcut(
-        event
-    ) {
-        const isRedo =
-            event.ctrlKey &&
-            !event.altKey &&
-            !event.shiftKey &&
-            (
-                event.key ===
-                    'y' ||
-                event.key ===
-                    'Y' ||
-                event.code ===
-                    'KeyY'
-            );
+        const firstCell =
+            main.firstElementChild;
 
 
-        if (!isRedo) {
-            return;
+        if (!firstCell) {
+            return null;
         }
 
 
         /*
-         * Ctrl+Y w edytorze wiadomości pozostaje standardowym
-         * ponowieniem edycji tekstu.
+         * W niektórych mailach Onet pokazuje w pierwszej komórce
+         * ikonę nadawcy (np. Allegro), a checkbox ujawnia dopiero po hover.
+         *
+         * Sam przycisk checkboxa nadal istnieje w DOM, tylko jest
+         * wizualnie ukryty. Dlatego NIE wymagamy isVisible().
          */
+        const buttons =
+            [
+                ...firstCell.querySelectorAll(
+                    'button[type="button"], button'
+                )
+            ];
+
+
         if (
-            isTyping(event)
+            buttons.length ===
+                0
         ) {
-            return;
+            return null;
         }
 
 
         /*
-         * Nie mieszamy historii usuwania z otwartym modalem.
+         * Preferujemy przycisk, który nie wygląda jak dekoracyjna ikona
+         * nadawcy. Checkbox zwykle jest pierwszym buttonem w tej komórce.
          */
-        if (
-            getConfirmationButton(
-                'cancel'
-            )
-        ) {
-            return;
-        }
-
-
-        if (
-            !peekRedoState()
-        ) {
-            return;
-        }
-
-
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-
-
-        await redoLastMove();
+        return buttons[0];
     }
-
-
 
 
     // ============================================================
@@ -2948,12 +2612,13 @@
             ...doc.querySelectorAll(
                 'li.list-item'
             )
-        ].filter(
-            row =>
-                isVisible(
-                    row
-                )
-        );
+        ]
+            .filter(
+                row =>
+                    isVisible(
+                        row
+                    )
+            );
     }
 
 
@@ -4195,73 +3860,6 @@
     }
 
 
-        function parseCssRgb(
-        value
-    ) {
-        if (
-            !value ||
-            value ===
-                'transparent'
-        ) {
-            return null;
-        }
-
-
-        const match =
-            String(
-                value
-            )
-                .match(
-                    /rgba?\(\s*(\d+(?:\.\d+)?)\s*[, ]\s*(\d+(?:\.\d+)?)\s*[, ]\s*(\d+(?:\.\d+)?)/i
-                );
-
-
-        if (!match) {
-            return null;
-        }
-
-
-        return {
-            r:
-                Number(
-                    match[1]
-                ),
-
-            g:
-                Number(
-                    match[2]
-                ),
-
-            b:
-                Number(
-                    match[3]
-                )
-        };
-    }
-
-
-    function isGoldStarColor(
-        color
-    ) {
-        if (!color) {
-            return false;
-        }
-
-
-        return (
-            color.r >=
-                180 &&
-            color.g >=
-                130 &&
-            color.b <=
-                120 &&
-            color.r >
-                color.b *
-                1.5
-        );
-    }
-
-
     function isRowStarred(
         row
     ) {
@@ -4306,7 +3904,7 @@
         );
     }
 
-        async function setUniformStarStateForSelectedRows(
+    async function setUniformStarStateForSelectedRows(
         rows
     ) {
         if (
@@ -4842,7 +4440,7 @@
 
 
             /*
-             * v4.8.12:
+             * v4.8.22:
              * Po zwykłym Delete/Backspace NIE robimy pełnego reloadu.
              * Backend już przyjął PATCH; zostawiamy stronę bez przeładowania.
              *
@@ -4873,150 +4471,37 @@
     // ============================================================
 
     function findDeleteButton() {
-        const doc =
-            getMainDocument();
+        const doc = getMainDocument();
 
-        const directSelectors = [
-            'button[aria-label="Usuń"]',
-            '[role="button"][aria-label="Usuń"]',
-            'button[title="Usuń"]',
-            '[role="button"][title="Usuń"]',
-            'button[aria-label="Usuń wiadomość"]',
-            '[role="button"][aria-label="Usuń wiadomość"]',
-            'button[title="Usuń wiadomość"]',
-            '[role="button"][title="Usuń wiadomość"]'
-        ];
+        const candidates =
+            doc.querySelectorAll(
+                'button, [role="button"]'
+            );
 
+        for (const button of candidates) {
+            if (!isVisible(button)) {
+                continue;
+            }
 
-        for (
-            const selector
-            of directSelectors
-        ) {
-            const candidates =
-                [
-                    ...doc.querySelectorAll(
-                        selector
-                    )
-                ];
-
-            const visible =
-                candidates.find(
-                    isVisible
-                );
-
-            if (visible) {
-                return visible;
+            if (
+                cleanText(
+                    button.getAttribute('title')
+                ) === 'Usuń' ||
+                cleanText(
+                    button.getAttribute('aria-label')
+                ) === 'Usuń' ||
+                cleanText(
+                    button.innerText
+                ) === 'Usuń' ||
+                cleanText(
+                    button.textContent
+                ) === 'Usuń'
+            ) {
+                return button;
             }
         }
 
-
-        const elements =
-            [
-                ...doc.querySelectorAll(
-                    'button, [role="button"], a, div, span'
-                )
-            ];
-
-        const candidates = [];
-
-
-        for (const el of elements) {
-            if (!isVisible(el)) {
-                continue;
-            }
-
-            const text =
-                cleanText(
-                    el.innerText ||
-                    el.textContent
-                );
-
-            const aria =
-                cleanText(
-                    el.getAttribute(
-                        'aria-label'
-                    )
-                );
-
-            const title =
-                cleanText(
-                    el.getAttribute(
-                        'title'
-                    )
-                );
-
-            const matches =
-                (
-                    text === 'Usuń' ||
-                    aria === 'Usuń' ||
-                    title === 'Usuń' ||
-                    aria === 'Usuń wiadomość' ||
-                    title === 'Usuń wiadomość'
-                );
-
-            if (!matches) {
-                continue;
-            }
-
-            const clickable =
-                el.closest(
-                    'button, [role="button"], a'
-                )
-                ||
-                el;
-
-            if (!isVisible(clickable)) {
-                continue;
-            }
-
-            const rect =
-                clickable
-                    .getBoundingClientRect();
-
-            let score = 0;
-
-            if (
-                clickable.tagName ===
-                'BUTTON'
-            ) {
-                score += 100;
-            }
-
-            if (
-                clickable.getAttribute(
-                    'role'
-                ) === 'button'
-            ) {
-                score += 60;
-            }
-
-            if (
-                aria === 'Usuń' ||
-                title === 'Usuń'
-            ) {
-                score += 40;
-            }
-
-            score -=
-                rect.top / 100;
-
-            candidates.push({
-                el: clickable,
-                score
-            });
-        }
-
-
-        candidates.sort(
-            (a, b) =>
-                b.score - a.score
-        );
-
-
-        return (
-            candidates[0]?.el ||
-            null
-        );
+        return null;
     }
 
 
@@ -5103,7 +4588,7 @@
 
 
     // ============================================================
-    // LISTENERY
+    // IFRAME-Y
     // ============================================================
 
     const installedDocuments =
@@ -5120,33 +4605,15 @@
 
         installedDocuments.add(doc);
 
-
-        /*
-         * Kolejność:
-         *
-         * 1. Ctrl+Z = cofnij ostatnie przeniesienie / usunięcie
-         * 2. Ctrl+Y = ponów ostatnio cofnięte przeniesienie
-         * 3. modal: Enter=Tak / Esc=Anuluj
-         * 4. Esc poza modalem: odznacz zaznaczone maile
-         * 5. Delete/Backspace: usuń
-         */
-
         doc.addEventListener(
-            'click',
-            handleManualSelectionClick,
-            true
-        );
-
-
-        doc.addEventListener(
-            'keydown',
-            handleUndoShortcut,
+            API_CAPTURE_EVENT,
+            onCapturedMove,
             true
         );
 
         doc.addEventListener(
             'keydown',
-            handleRedoShortcut,
+            handleUndoRedoShortcut,
             true
         );
 
@@ -5161,6 +4628,7 @@
             handleEscapeDeselect,
             true
         );
+
 
         doc.addEventListener(
             'keydown',
@@ -5188,61 +4656,27 @@
             deleteCurrentMail,
             true
         );
-
-        scanFrames(doc);
-
-        console.log(
-            'ONET DELETE 4.8.22: listenery założone',
-            doc
-        );
     }
 
 
-    // ============================================================
-    // IFRAMES
-    // ============================================================
-
-    function attachFrame(iframe) {
-        function tryAttach() {
-            try {
-                const frameDoc =
-                    iframe.contentDocument;
-
-                if (frameDoc) {
+    function attachFrame(frame) {
+        const install =
+            () => {
+                try {
                     installOnDocument(
-                        frameDoc
+                        frame.contentDocument
                     );
-                }
-            } catch {}
-        }
+                } catch {}
+            };
 
-        tryAttach();
+        install();
 
-        iframe.addEventListener(
+        frame.addEventListener(
             'load',
-            tryAttach
+            install
         );
     }
 
-
-    function scanFrames(doc) {
-        for (
-            const iframe
-            of doc.querySelectorAll(
-                'iframe'
-            )
-        ) {
-            attachFrame(iframe);
-        }
-    }
-
-
-    // ============================================================
-    // SPA
-    // ============================================================
-
-    const mainDocument =
-        getMainDocument();
 
     /*
      * Historia stosów przeżywa reload bieżącej karty dzięki sessionStorage.
@@ -5257,24 +4691,40 @@
 
     /*
      * Musi być aktywne zanim użytkownik pierwszy raz naciśnie Delete
-     * albo użyje "Przenieś".
-     * @grant none sprawia, że patchujemy ten sam window.fetch,
-     * którego używa aplikacja Onet Poczta.
+     * albo kliknie Przenieś.
      */
     installFetchInterceptor();
+
+
+    const mainDocument =
+        getMainDocument();
 
     installOnDocument(
         mainDocument
     );
 
 
+    for (
+        const frame
+        of mainDocument.querySelectorAll(
+            'iframe'
+        )
+    ) {
+        attachFrame(frame);
+    }
+
+
+    /*
+     * Onet jest SPA, więc obserwujemy tylko dodawanie iframe-ów.
+     *
+     * MutationObserver NIE skanuje całej aplikacji w poszukiwaniu
+     * checkboxów ani modali. Modal znajduje dopiero klawisz Enter/Esc,
+     * a odznaczenie Esc działa po stabilnym li.is-checked.
+     */
     const observer =
         new MutationObserver(
             mutations => {
-                for (
-                    const mutation
-                    of mutations
-                ) {
+                for (const mutation of mutations) {
                     for (
                         const node
                         of mutation.addedNodes
@@ -5287,12 +4737,9 @@
                         }
 
                         if (
-                            node.tagName ===
-                            'IFRAME'
+                            node.tagName === 'IFRAME'
                         ) {
-                            attachFrame(
-                                node
-                            );
+                            attachFrame(node);
                         }
 
                         for (
@@ -5307,9 +4754,14 @@
                         }
                     }
                 }
+
+
+                setTimeout(
+                    syncKeyboardFocusToFreshDom,
+                    80
+                );
             }
         );
-
 
     observer.observe(
         mainDocument.documentElement,
