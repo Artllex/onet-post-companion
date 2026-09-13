@@ -1,0 +1,13 @@
+{
+  "summary": {
+    "pl": "Szybsza obsługa Onet Poczty: skróty klawiaturowe, zaznaczanie, gwiazdki, usuwanie i cofanie operacji.",
+    "en-US": "Faster Onet Mail handling with keyboard shortcuts, selection, starring, deletion and undo/redo."
+  },
+  "categories": [
+    "other"
+  ],
+  "version": {
+    "license": "MIT",
+    "approval_notes": "Onet Post Companion is a Firefox-only extension for poczta.onet.pl. It runs readable, unminified first-party JavaScript only. No third-party libraries or remote code are used. The MAIN execution world is intentional because the extension intercepts the page's own fetch calls to preserve undo/redo for mail move/delete operations. The extension communicates only with poczta.onet.pl and api.poczta.onet.pl within the user's authenticated Onet Mail session. No analytics or developer servers are used."
+  }
+}
